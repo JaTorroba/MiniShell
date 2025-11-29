@@ -18,7 +18,6 @@
 
 # Libraries
 *.lib
-*.a
 *.la
 *.lo
 
@@ -29,6 +28,7 @@
 *.dylib
 
 # Executables
+/bin
 *.exe
 *.out
 *.app
