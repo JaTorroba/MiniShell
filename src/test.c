@@ -2,17 +2,17 @@
 
 #include "parser.h"
 
-int
-main(void) {
+int main(void) {
 	char buf[1024];
 	tline * line;
 	int i,j;
 
-	printf("==> ");	
+	printf("msh> ");	
+
 	while (fgets(buf, 1024, stdin)) {
-		
+
 		line = tokenize(buf);
-		if (line==NULL) {
+		if (line == NULL) {
 			continue;
 		}
 		if (line->redirect_input != NULL) {
@@ -27,13 +27,15 @@ main(void) {
 		if (line->background) {
 			printf("comando a ejecutarse en background\n");
 		} 
-		for (i=0; i<line->ncommands; i++) {
+		for (i = 0; i < line->ncommands; i++) {
 			printf("orden %d (%s):\n", i, line->commands[i].filename);
-			for (j=0; j<line->commands[i].argc; j++) {
+			for (j = 0; j <line->commands[i].argc; j++) {
 				printf("  argumento %d: %s\n", j, line->commands[i].argv[j]);
 			}
 		}
-		printf("==> ");	
+		
+		printf("msh> ");	
+
 	}
 	return 0;
 }
