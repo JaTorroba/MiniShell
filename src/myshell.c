@@ -1,11 +1,14 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 #include "parser.h"
 
 int main(void) {
 	char buf[1024];
 	tline * line;
-	int i,j;
+	int i;
+	pid_t *processes;
 
 	printf("msh> ");	
 
@@ -15,7 +18,26 @@ int main(void) {
 		if (line == NULL) {
 			continue;
 		}
-		if (line->redirect_input != NULL) {
+
+		printf("%d\n",line->ncommands);
+
+		processes = malloc(sizeof(pid_t) * line->ncommands);
+		for(i = 0; i < line->ncommands; i++){
+			processes[i] = fork();
+			if (processes[i] != 0) {
+				printf("%d\n",processes[i]);
+				break;
+			}
+		}
+			
+		printf("msh> ");	
+
+	}
+	return 0;
+}
+
+/*
+if (line->redirect_input != NULL) {
 			printf("redirección de entrada: %s\n", line->redirect_input);
 		}
 		if (line->redirect_output != NULL) {
@@ -33,9 +55,4 @@ int main(void) {
 				printf("  argumento %d: %s\n", j, line->commands[i].argv[j]);
 			}
 		}
-		
-		printf("msh> ");	
-
-	}
-	return 0;
-}
+*/
