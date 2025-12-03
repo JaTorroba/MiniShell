@@ -6,9 +6,10 @@
 
 int main(void) {
 	char buf[1024];
-	tline * line;
+	tline *line;
 	int i;
 	pid_t *processes;
+	int **pipes;
 
 	printf("msh> ");	
 
@@ -19,14 +20,20 @@ int main(void) {
 			continue;
 		}
 
-		printf("%d\n",line->ncommands);
-
 		processes = malloc(sizeof(pid_t) * line->ncommands);
+		pipes = (int **)malloc(sizeof(int *) * (line->ncommands - 1));
+
+		//pipe intialization
+		for (i = 0; i < line->ncommands - 1; i++) {
+                pipes[i] = (int *)malloc(sizeof(int) * 2);
+        }
+
 		for(i = 0; i < line->ncommands; i++){
 			processes[i] = fork();
-			if (processes[i] != 0) {
-				printf("%d\n",processes[i]);
-				break;
+
+			//Child process code
+			if (processes[i] == 0) {
+			
 			}
 		}
 			
