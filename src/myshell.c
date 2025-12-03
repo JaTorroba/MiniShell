@@ -34,16 +34,17 @@ int is_internal(char *name){
 void execute_internal(int argc, char **argv){
 	char *name = argv[0];
 	if (strcmp(name, "cd") == 0) {
-        cd(argc, argv);        
+       // cd(argc, argv);        
     } else if (strcmp(name, "jobs") == 0) {
         // jobs(argv);
     } else if (strcmp(name, "bg") == 0) {
         // bg(argv);
     } else if (strcmp(name, "exit") == 0) {
-        // exit_ms();         
+        exit(0);         
     } else if (strcmp(name, "umask") == 0) {
         // umask_ms(argc, argv);
     }
+	return 0;
 }
 
 int main(void) {
@@ -95,7 +96,7 @@ int main(void) {
 
 		for(i = 0; i < line->ncommands; i++){
 			processes[i] = fork();
-			if (processes[i] < 0){
+			if (processes[i] < 0) {
 				fprintf(stderr, "Error on fork\n");
 				error = 1;
 				break;
@@ -125,12 +126,6 @@ int main(void) {
 						close(fd);
 					}	
 				}
-				if (i > 0){
-					dup2(pipes[i-1][0], 0); //set stdin to pipe on reader
-				}
-				if (i < line->ncommands - 1){
-					dup2(pipes[i][1], 1); //set stdout to pipe on writer
-				}
 				if (i == 0 && line->redirect_input != NULL){
 					fd = open(line->redirect_input, O_RDONLY);
 					if (fd < 0){
@@ -139,6 +134,12 @@ int main(void) {
 					}
 					dup2(fd, 0);
 					close(fd);
+				}
+				if (i > 0){
+					dup2(pipes[i-1][0], 0); //set stdin to pipe on reader
+				}
+				if (i < line->ncommands - 1){
+					dup2(pipes[i][1], 1); //set stdout to pipe on writer
 				}
 
 				for (j = 0; j < line->ncommands - 1; j++){
@@ -172,25 +173,3 @@ int main(void) {
 			
 	return 0;
 }
-
-
-/*
-if (line->redirect_input != NULL) {
-			printf("redirección de entrada: %s\n", line->redirect_input);
-		}
-		if (line->redirect_output != NULL) {
-			printf("redirección de salida: %s\n", line->redirect_output);
-		}
-		if (line->redirect_error != NULL) {
-			printf("redirección de error: %s\n", line->redirect_error);
-		}
-		if (line->background) {
-			printf("comando a ejecutarse en background\n");
-		} 
-		for (i = 0; i < line->ncommands; i++) {
-			printf("orden %d (%s):\n", i, line->commands[i].filename);
-			for (j = 0; j <line->commands[i].argc; j++) {
-				printf("  argumento %d: %s\n", j, line->commands[i].argv[j]);
-			}
-		}
-*/
