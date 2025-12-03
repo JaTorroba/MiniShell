@@ -8,15 +8,55 @@
 
 #include "parser.h"
 
-char *wd;
+mode_t mask;
 
 void cd(int argc, char **argv){
-	//TODO check if de directory exists
-	if (argc == 0){
-		//wd = 
-	} else {
-		wd = argv[0];
-		printf("%s",wd);
+	char *dir;
+    char buf[1024];
+    if (argc == 1) {
+        dir = getenv("HOME");
+        if (dir == NULL) {
+            fprintf(stderr, "Could not change directory to HOME\n");
+            return;
+        }
+    } else if (argc == 2){
+        dir = argv[1];
+    } else {
+		fprintf(stderr, "Invalid number of arguments, USE: cd [DIR]\n");
+		return;
+	}
+    if (chdir(dir) != 0) {
+        fprintf(stderr, "Could not find or enter directory %s\n", dir); 
+    } else {
+        if (getcwd(buf, 1024) != NULL) {
+            printf("%s\n", buf);
+        } else {
+            fprintf(stderr, "Could not get the gurrent directory");
+        }
+    }
+}
+
+void umask_ms(int argc, char **argv){
+	char *endptr;
+	if (argc == 1){
+		mode_t current_mask = umask(0);
+		umask(current_mask);
+		printf("%04o\n", current_mask);
+	}else if (argc == 2){
+		mode_t new_mask = (mode_t) strtoul(argv[1], &endptr, 8);
+		if (endptr == argv[1]){
+			fprintf(stderr, "Invalid argument:%s\n", argv[1]);
+			return;
+		}
+		if (strcmp(endptr, "\0")){
+			fprintf(stderr, "umask: Invalid argument: %s\n", argv[1]);
+			return;
+		}
+		mask = new_mask;
+		umask(new_mask);
+	}else {
+		fprintf(stderr, "umask: demasiados argumentos");
+		return;
 	}
 }
 
@@ -34,7 +74,7 @@ int is_internal(char *name){
 void execute_internal(int argc, char **argv){
 	char *name = argv[0];
 	if (strcmp(name, "cd") == 0) {
-       // cd(argc, argv);        
+       cd(argc, argv);        
     } else if (strcmp(name, "jobs") == 0) {
         // jobs(argv);
     } else if (strcmp(name, "bg") == 0) {
@@ -42,9 +82,8 @@ void execute_internal(int argc, char **argv){
     } else if (strcmp(name, "exit") == 0) {
         exit(0);         
     } else if (strcmp(name, "umask") == 0) {
-        // umask_ms(argc, argv);
+        umask_ms(argc, argv);
     }
-	return 0;
 }
 
 int main(void) {
@@ -107,8 +146,9 @@ int main(void) {
 
 				//pipe linking & input, output, error redirections
 				if (i == line->ncommands - 1){
+					//Standard output redirection in last process in the pipe
 					if (line->redirect_output != NULL){
-						fd = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+						fd = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, mask);
 						if (fd < 0){
 							fprintf(stderr, "Fichero: Error. No se pudo abrir %s\n", line->redirect_output);
 							exit(5);
@@ -116,8 +156,9 @@ int main(void) {
 						dup2(fd, 1);
 						close(fd);
 					}
+					//Error output redirection in last process in the pipe
 					if (line->redirect_error != NULL){
-						fd = open(line->redirect_error, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+						fd = open(line->redirect_error, O_WRONLY | O_CREAT | O_TRUNC, mask);
 						if (fd < 0){
 							fprintf(stderr, "Fichero: Error. No se pudo abrir %s\n", line->redirect_error);
 							exit(5);
@@ -126,6 +167,7 @@ int main(void) {
 						close(fd);
 					}	
 				}
+				//Input redirection in first process in the pipe
 				if (i == 0 && line->redirect_input != NULL){
 					fd = open(line->redirect_input, O_RDONLY);
 					if (fd < 0){
