@@ -12,3 +12,10 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 echo "Executable 'myshell' created in bin/myshell";
+#Debugging:
+#gcc -g on generating executable commando
+#gdb executable
+#l [n] | shows next n lines of code
+#b n | creates breakpoint in line n
+#r | run
+#n | executes next line
