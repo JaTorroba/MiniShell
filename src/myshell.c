@@ -8,6 +8,7 @@
 
 #include "parser.h"
 
+//current mask applied in file creation for this shell process
 mode_t mask;
 
 void cd(int argc, char **argv){
@@ -89,14 +90,16 @@ void execute_internal(int argc, char **argv){
 int main(void) {
 	char buf[1024];
 	tline *line;
-	int i;
+	int i, j, error;;
 	pid_t *processes;
-	int pip[2];
+	int **pipes;
 	int fd;
 
 	printf("msh> ");	
 
 	while (fgets(buf, 1024, stdin)) {
+		error = 0;
+
 		line = tokenize(buf);
 		if (line == NULL) continue;
 
@@ -108,33 +111,38 @@ int main(void) {
 		}
 				
 		processes = malloc(sizeof(pid_t) * line->ncommands);
-		// pipes = (int **)malloc(sizeof(int *) * (line->ncommands - 1));
+		pipes = (int **)malloc(sizeof(int *) * (line->ncommands - 1));
 
-		//pipe initialization
-		// for (i = 0; i < line->ncommands - 1; i++) {
-		// 	pipes[i] = (int *)malloc(sizeof(int) * 2);
-		// 	if (pipe(pipes[i]) < 0){
-		// 		fprintf(stderr, "Error on initializing pipes");
-		// 		error = i;
-		// 		break;
-		// 	}
-        // }
+		//Create pipes & check for errors
+		for (i = 0; i < line->ncommands - 1; i++) {
+                pipes[i] = (int *)malloc(sizeof(int) * 2);
+				if (pipe(pipes[i]) < 0){
+					fprintf(stderr, "Error on initializing pipes");
+					error = i;
+					break;
+				}
+        }
 
-		if (pipe(pip) != 0){
+		if (error != 0){
 			free(processes);
-			fprintf(stderr, "Erro on pipe creation");
+			for(i = 0; i < error; i++){
+				free(pipes[i]);
+			}
+			free(pipes);
 			printf("msh> ");
 			continue;
 		} 
 
+
 		for(i = 0; i < line->ncommands; i++){
+			//Child process creation
 			processes[i] = fork();
 			if (processes[i] < 0) {
 				fprintf(stderr, "Error on fork\n");
 				break;
 			}
 
-			//Child process code
+			/*************************CHILDREN PROCESS CODE*************************/
 			if (processes[i] == 0) {
 
 				//pipe linking & input, output, error redirections
@@ -171,38 +179,39 @@ int main(void) {
 					close(fd);
 				}
 				if (i > 0){
-					dup2(pip[0], 0); //set stdin to pipe on reader
+					dup2(pipes[i-1][0], 0); //set stdin to pipe on reader
 				}
 				if (i < line->ncommands - 1){
-					dup2(pip[1], 1); //set stdout to pipe on writer
+					dup2(pipes[i][1], 1); //set stdout to pipe on writer
 				}
-				close(pip[0]);
-				close(pip[1]);
+				//close all pipes to avoid blocks
+				for (j = 0; j < line->ncommands - 1; j++){
+					close(pipes[j][0]);
+					close(pipes[j][1]);
+				}
 
+				//execute the command if the command is found
+				if (line->commands[i].filename != NULL){
+					execvp(line->commands[i].filename, line->commands[i].argv);	
+				}
 
-				// for (j = 0; j < line->ncommands - 1; j++){
-				// 	close(pipes[j][0]);
-				// 	close(pipes[j][1]);
-				// }
-
-				execvp(line->commands[i].filename, line->commands[i].argv);
-
-				fprintf(stderr, "Mandato: No se encuentra el mandato");
+				//terminate process if the command is not found
+				fprintf(stderr, "Mandato: No se encuentra el mandato\n");
 				exit(1);
 			} 
 		}
 
-		// for(i = 0; i < line->ncommands - 1; i++){
-		// 	close(pipes[i][0]);
-		// 	close(pipes[i][1]);
-		// 	free(pipes[i]);
-		// }
-		close(pip[0]);
-		close(pip[1]);
+		/*************************PARENT CODE*************************/
 
-		// if (line->ncommands > 1) free(pipes);
+		//close unused pipes in parent process to avoid blocks & free memorie
+		for(i = 0; i < line->ncommands - 1; i++){
+				close(pipes[i][0]);
+				close(pipes[i][1]);
+				free(pipes[i]);
+		}
+		if (line->ncommands > 1) free(pipes);
 
-
+		//wait for child processes
 		for(i = 0; i < line->ncommands; i++){
 			wait(NULL);
 		}

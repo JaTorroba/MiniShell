@@ -13,7 +13,7 @@ if [ $? -ne 0 ]; then
 fi
 echo "Executable 'myshell' created in bin/myshell";
 #Debugging:
-#gcc -g on generating executable commando
+#gcc -g on generating executable command
 #gdb executable
 #l [n] | shows next n lines of code
 #b n | creates breakpoint in line n
