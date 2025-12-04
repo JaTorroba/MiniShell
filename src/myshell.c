@@ -55,7 +55,7 @@ void umask_ms(int argc, char **argv){
 		mask = new_mask;
 		umask(new_mask);
 	}else {
-		fprintf(stderr, "umask: demasiados argumentos");
+		fprintf(stderr, "umask: too many arguments");
 		return;
 	}
 }
@@ -89,17 +89,14 @@ void execute_internal(int argc, char **argv){
 int main(void) {
 	char buf[1024];
 	tline *line;
-	int i, j, error;
+	int i;
 	pid_t *processes;
-	int **pipes;
+	int pip[2];
 	int fd;
 
 	printf("msh> ");	
 
 	while (fgets(buf, 1024, stdin)) {
-
-		error = 0;
-
 		line = tokenize(buf);
 		if (line == NULL) continue;
 
@@ -111,24 +108,21 @@ int main(void) {
 		}
 				
 		processes = malloc(sizeof(pid_t) * line->ncommands);
-		pipes = (int **)malloc(sizeof(int *) * (line->ncommands - 1));
+		// pipes = (int **)malloc(sizeof(int *) * (line->ncommands - 1));
 
 		//pipe initialization
-		for (i = 0; i < line->ncommands - 1; i++) {
-                pipes[i] = (int *)malloc(sizeof(int) * 2);
-				if (pipe(pipes[i]) < 0){
-					fprintf(stderr, "Error on initializing pipes");
-					error = i;
-					break;
-				}
-        }
+		// for (i = 0; i < line->ncommands - 1; i++) {
+		// 	pipes[i] = (int *)malloc(sizeof(int) * 2);
+		// 	if (pipe(pipes[i]) < 0){
+		// 		fprintf(stderr, "Error on initializing pipes");
+		// 		error = i;
+		// 		break;
+		// 	}
+        // }
 
-		if (error != 0){
+		if (pipe(pip) != 0){
 			free(processes);
-			for(i = 0; i < error; i++){
-				free(pipes[i]);
-			}
-			free(pipes);
+			fprintf(stderr, "Erro on pipe creation");
 			printf("msh> ");
 			continue;
 		} 
@@ -137,7 +131,6 @@ int main(void) {
 			processes[i] = fork();
 			if (processes[i] < 0) {
 				fprintf(stderr, "Error on fork\n");
-				error = 1;
 				break;
 			}
 
@@ -178,16 +171,19 @@ int main(void) {
 					close(fd);
 				}
 				if (i > 0){
-					dup2(pipes[i-1][0], 0); //set stdin to pipe on reader
+					dup2(pip[0], 0); //set stdin to pipe on reader
 				}
 				if (i < line->ncommands - 1){
-					dup2(pipes[i][1], 1); //set stdout to pipe on writer
+					dup2(pip[1], 1); //set stdout to pipe on writer
 				}
+				close(pip[0]);
+				close(pip[1]);
 
-				for (j = 0; j < line->ncommands - 1; j++){
-					close(pipes[j][0]);
-					close(pipes[j][1]);
-				}
+
+				// for (j = 0; j < line->ncommands - 1; j++){
+				// 	close(pipes[j][0]);
+				// 	close(pipes[j][1]);
+				// }
 
 				execvp(line->commands[i].filename, line->commands[i].argv);
 
@@ -196,12 +192,15 @@ int main(void) {
 			} 
 		}
 
-		for(i = 0; i < line->ncommands - 1; i++){
-				close(pipes[i][0]);
-				close(pipes[i][1]);
-				free(pipes[i]);
-		}
-		if (line->ncommands > 1) free(pipes);
+		// for(i = 0; i < line->ncommands - 1; i++){
+		// 	close(pipes[i][0]);
+		// 	close(pipes[i][1]);
+		// 	free(pipes[i]);
+		// }
+		close(pip[0]);
+		close(pip[1]);
+
+		// if (line->ncommands > 1) free(pipes);
 
 
 		for(i = 0; i < line->ncommands; i++){
