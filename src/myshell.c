@@ -221,9 +221,9 @@ void wait_bg(){
 int main(void) {
 	char buf[1024];
 	tline *line;
-	int i, j, error, fd, status;
+	int i, fd, status;
 	pid_t *processes;
-	int **pipes;
+	int pip[2], prev_pip_read;
 
 
 	/*********************SIGNAL CONFIG CODE*********************/
@@ -235,7 +235,6 @@ int main(void) {
 	while (fgets(buf, 1024, stdin)) {
 
 		wait_bg();
-		error = 0;
 
 		line = tokenize(buf);
 		if (line == NULL) continue;
@@ -248,30 +247,18 @@ int main(void) {
 		}
 				
 		processes = malloc(sizeof(pid_t) * line->ncommands);
-		pipes = (int **)malloc(sizeof(int *) * (line->ncommands - 1));
-
-		//Create pipes & check for errors
-		for (i = 0; i < line->ncommands - 1; i++) {
-                pipes[i] = (int *)malloc(sizeof(int) * 2);
-				if (pipe(pipes[i]) < 0){
-					fprintf(stderr, "Error on initializing pipes");
-					error = i;
-					break;
-				}
-        }
-
-		if (error != 0){
-			free(processes);
-			for(i = 0; i < error; i++){
-				free(pipes[i]);
-			}
-			free(pipes);
-			printf("msh> ");
-			continue;
-		} 
-
+		prev_pip_read = -1;
+		
 		for(i = 0; i < line->ncommands; i++){
 			//Child process creation
+
+			//Create pipe for current child
+			if (i < line->ncommands - 1) {
+                if (pipe(pip) < 0) {
+                    fprintf(stderr, "Error on pipe creation");
+                    break; 
+                }
+            }
 			processes[i] = fork();
 			if (processes[i] < 0) {
 				fprintf(stderr, "Error on fork\n");
@@ -311,6 +298,8 @@ int main(void) {
 						dup2(fd, 2);
 						close(fd);
 					}	
+				} else {
+					dup2(pip[1], 1); //set stdout to pipe on writer
 				}
 				//Input redirection in first process in the pipe
 				if (i == 0 && line->redirect_input != NULL){
@@ -321,18 +310,16 @@ int main(void) {
 					}
 					dup2(fd, 0);
 					close(fd);
-				}
-				if (i > 0){
-					dup2(pipes[i-1][0], 0); //set stdin to pipe on reader
-				}
-				if (i < line->ncommands - 1){
-					dup2(pipes[i][1], 1); //set stdout to pipe on writer
-				}
-				//close all pipes to avoid blocks
-				for (j = 0; j < line->ncommands - 1; j++){
-					close(pipes[j][0]);
-					close(pipes[j][1]);
-				}
+				} else if (i > 0 && prev_pip_read != -1) {
+                    // set stdin to previous pipe with write end on previous child
+                    dup2(prev_pip_read, 0);
+                    close(prev_pip_read);
+                }
+				
+				if (i < line->ncommands - 1) {
+                    close(pip[0]);
+                    close(pip[1]);
+                }
 
 				//execute the command if the command is found
 				if (line->commands[i].filename != NULL){
@@ -342,20 +329,21 @@ int main(void) {
 				//terminate process if the command is not found
 				fprintf(stderr, "Mandato: No se encuentra el mandato\n");
 				exit(1);
+			} else {
+				/*************************PARENT CODE*************************/
+				// Close previous pipe read
+                if (i > 0 && prev_pip_read != -1) {
+                    close(prev_pip_read);
+                }
+				//Close pipe on write (unused) & set prev_pip_read to pip[0] for next iteration
+                if (i < line->ncommands - 1) {
+                    close(pip[1]);
+                    prev_pip_read = pip[0];
+                }
 			} 
 		}
 
 		/*************************PARENT CODE*************************/
-
-		//Ignore sigint while the foreground process is in execution
-
-		//close unused pipes in parent process to avoid blocks & free memorie
-		for(i = 0; i < line->ncommands - 1; i++){
-				close(pipes[i][0]);
-				close(pipes[i][1]);
-				free(pipes[i]);
-		}
-		if (line->ncommands > 1) free(pipes);
 
 		if (line->background == 1){
 			printf("[%d] %d\n", last_job, processes[line->ncommands - 1]);
