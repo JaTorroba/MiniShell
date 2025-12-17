@@ -9,8 +9,6 @@
 #include "parser.h"
 
 #define MAXJOBS 64
-//current mask applied in file creation for this shell process
-mode_t mask;
 
 typedef struct{
 	int id;
@@ -55,6 +53,10 @@ void umask_ms(int argc, char **argv){
 		umask(current_mask);
 		printf("%04o\n", current_mask);
 	}else if (argc == 2){
+		if (strlen(argv[1]) > 4 || argv[1][0] != '0'){
+			fprintf(stderr, "Error: umask: invalid argument:%s\n", argv[1]);
+			return;
+		}
 		mode_t new_mask = (mode_t) strtoul(argv[1], &endptr, 8);
 		if (endptr == argv[1]){
 			fprintf(stderr, "Error: umask: invalid argument:%s\n", argv[1]);
@@ -64,7 +66,6 @@ void umask_ms(int argc, char **argv){
 			fprintf(stderr, "Error: umask: invalid argument: %s\n", argv[1]);
 			return;
 		}
-		mask = new_mask;
 		umask(new_mask);
 	}else {
 		fprintf(stderr, "Error: umask: too many arguments");
@@ -112,11 +113,16 @@ void bg(char **argv){
     int job_index = -1;
 
     if (argv[1] == NULL) {
-        if (last_job == 0) {
-            fprintf(stderr, "Error: bg: no current jobs\n");
-            return;
-        }
-        job_index = last_job - 1;
+        for(i = last_job - 1; i >= 0; i--){
+			if(job_list[i]->running == 0){
+				job_index = i;
+				break;
+			}
+		}
+		if(job_index == -1){
+			printf("No current job is stopped\n");
+			return;
+		}
     } else {
         job_id = atoi(argv[1]); 
         for (i = 0; i < last_job; i++) {
@@ -280,7 +286,7 @@ int main(void) {
 				if (i == line->ncommands - 1){
 					//Standard output redirection in last process in the pipe
 					if (line->redirect_output != NULL){
-						fd = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, mask);
+						fd = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 						if (fd < 0){
 							fprintf(stderr, "Fichero: Error. No se pudo abrir %s\n", line->redirect_output);
 							exit(5);
@@ -290,7 +296,7 @@ int main(void) {
 					}
 					//Error output redirection in last process in the pipe
 					if (line->redirect_error != NULL){
-						fd = open(line->redirect_error, O_WRONLY | O_CREAT | O_TRUNC, mask);
+						fd = open(line->redirect_error, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 						if (fd < 0){
 							fprintf(stderr, "Fichero: Error. No se pudo abrir %s\n", line->redirect_error);
 							exit(5);
