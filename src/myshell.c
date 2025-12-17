@@ -165,7 +165,7 @@ void bg(char **argv){
 
 void execute_internal(int argc, char **argv){
 	char *name = argv[0];
-	int i;
+	int i, j;
 	if (strcmp(name, "cd") == 0) {
        cd(argc, argv);        
     } else if (strcmp(name, "jobs") == 0) {
@@ -175,6 +175,10 @@ void execute_internal(int argc, char **argv){
     } else if (strcmp(name, "exit") == 0) {
 		//free all jobs and their related memory reservation & terminate execution
 		for(i = 0; i < last_job; i++){
+			for(j = 0; j < job_list[i]->ncommands; j++){
+				kill(job_list[i]->pids[j], SIGKILL); //end processes in execution on background
+				waitpid(job_list[i]->pids[j], NULL, 0);
+			}
 			free(job_list[i]->pids);
 			free(job_list[i]);
 		}
@@ -388,7 +392,7 @@ int main(void) {
 				fprintf(stderr, "Error on memory reservation\n");
 			} else {
 				memcpy(copy, processes, line->ncommands * sizeof(pid_t));
-				add_job(processes, buf, 1, line->ncommands);
+				add_job(copy, buf, 1, line->ncommands);
 				usleep(10000); //Cosmetic fix for printing the command output in a separate line
 			}
 		} else {
