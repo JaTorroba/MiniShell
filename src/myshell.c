@@ -12,7 +12,8 @@
 
 typedef struct{
 	int id;
-	pid_t pid;
+	pid_t *pids;
+	int ncommands;
 	char command[1024];
 	int running; //1 if running 0 if stopped
 } tjob;
@@ -140,10 +141,13 @@ void bg(char **argv){
         printf("bg: job [%d] is already running\n", job_list[job_index]->id);
         return;
     }
-    if (kill(job_list[job_index]->pid, SIGCONT) < 0) {
-        fprintf(stderr, "Error: bg: could not continue command [%d] execution", job_list[job_index]->id);
-        return;
-    }
+	for(i = 0; i < job_list[job_index]->ncommands; i++){
+		if (kill(job_list[job_index]->pids[i], SIGCONT) < 0) {
+			fprintf(stderr, "Error: bg: could not continue command [%d] execution\n", job_list[job_index]->id);
+			return;
+    	}
+	}
+   
 
     job_list[job_index]->running = 1;
     printf("[%d]+\t%s &\n", job_list[job_index]->id, job_list[job_index]->command);
@@ -151,6 +155,7 @@ void bg(char **argv){
 
 void execute_internal(int argc, char **argv){
 	char *name = argv[0];
+	int i;
 	if (strcmp(name, "cd") == 0) {
        cd(argc, argv);        
     } else if (strcmp(name, "jobs") == 0) {
@@ -158,6 +163,10 @@ void execute_internal(int argc, char **argv){
     } else if (strcmp(name, "bg") == 0) {
         bg(argv);
     } else if (strcmp(name, "exit") == 0) {
+		for(i = 0; i < last_job; i++){
+			free(job_list[i]->pids);
+			free(job_list[i]);
+		}
         exit(0);         
     } else if (strcmp(name, "umask") == 0) {
         umask_ms(argc, argv);
@@ -173,8 +182,9 @@ void shell_sigint_handler(){
 int remove_job(pid_t pid){
 	int i, j, ret;
 	for (i = 0; i < last_job; i++){
-		if (job_list[i]->pid == pid){
+		if (job_list[i]->pids[job_list[i]->ncommands - 1] == pid){
 			ret = job_list[i]->id;
+			free(job_list[i]->pids);
 			free(job_list[i]);
 			//restructure job_list
 			for(j = i; j < last_job - 1; j++){
@@ -187,7 +197,7 @@ int remove_job(pid_t pid){
 	return -1;
 }
 
-void add_job(pid_t pid, char *command_line, int running){
+void add_job(pid_t *pids, char *command_line, int running, int num_commands){
 	size_t len;
 	
 	if (last_job >= MAXJOBS) { // Array overflow protection
@@ -196,7 +206,9 @@ void add_job(pid_t pid, char *command_line, int running){
     }
 	tjob *new_job = malloc(sizeof(tjob));
 	new_job->id = last_job;
-	new_job->pid = pid;
+	new_job->ncommands = num_commands;
+	new_job->pids = pids;
+
 	strcpy(new_job->command,command_line);
 
 	len = strlen(new_job->command);
@@ -228,7 +240,7 @@ int main(void) {
 	char buf[1024];
 	tline *line;
 	int i, fd, status;
-	pid_t *processes;
+	pid_t *processes, *copy;
 	int pip[2], prev_pip_read;
 
 
@@ -253,6 +265,10 @@ int main(void) {
 		}
 				
 		processes = malloc(sizeof(pid_t) * line->ncommands);
+		if (processes == NULL){
+			fprintf(stderr, "Error on memory reservation\n");
+			continue;
+		}
 		prev_pip_read = -1;
 		
 		for(i = 0; i < line->ncommands; i++){
@@ -353,9 +369,15 @@ int main(void) {
 
 		if (line->background == 1){
 			printf("[%d] %d\n", last_job, processes[line->ncommands - 1]);
-			//add last process in the line to jobs
-			add_job(processes[line->ncommands - 1], buf, 1);
-			usleep(10000); //Cosmetic fix for printing the command output in a separate line
+			//add processes to jobs
+			copy = malloc(sizeof(pid_t) * line->ncommands);
+			if (copy == NULL){
+				fprintf(stderr, "Error on memory reservation\n");
+			} else {
+				memcpy(copy, processes, line->ncommands * sizeof(pid_t));
+				add_job(processes, buf, 1, line->ncommands);
+				usleep(10000); //Cosmetic fix for printing the command output in a separate line
+			}
 		} else {
 			//ignore SIGINT while waiting for foreground
 			signal(SIGINT, SIG_IGN);
@@ -368,8 +390,14 @@ int main(void) {
                 }
 
 				if (WIFSTOPPED(status)){
-					printf("\n[%d]+ Stopped\n", last_job);
-					add_job(processes[line->ncommands - 1], buf, 0);
+					copy = malloc(sizeof(pid_t) * line->ncommands);
+					if (copy == NULL){
+						fprintf(stderr, "Error on memory reservation\n");
+					} else {
+						memcpy(copy, processes + i, (line->ncommands - i) * sizeof(pid_t));
+						printf("\n[%d]+ Stopped\n", last_job);
+						add_job(copy, buf, 0, line->ncommands - i);
+					}
 					break;
 				}
 			}
