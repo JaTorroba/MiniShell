@@ -25,6 +25,7 @@ void cd(int argc, char **argv){
 	char *dir;
     char buf[1024];
     if (argc == 1) {
+		//change directory ton HOME env if there was nor argument
         dir = getenv("HOME");
         if (dir == NULL) {
             fprintf(stderr, "Error: cd: could not change directory to HOME\n");
@@ -36,10 +37,12 @@ void cd(int argc, char **argv){
 		fprintf(stderr, "Error: cd: invalid number of arguments, USE: cd [DIR]\n");
 		return;
 	}
+	//change the directory to the new one
     if (chdir(dir) != 0) {
         fprintf(stderr, "Error: cd: could not find or enter directory %s\n", dir); 
     } else {
         if (getcwd(buf, 1024) != NULL) {
+			//print wd 
             printf("%s\n", buf);
         } else {
             fprintf(stderr, "Error: cd: could not get the gurrent directory");
@@ -50,15 +53,18 @@ void cd(int argc, char **argv){
 void umask_ms(int argc, char **argv){
 	char *endptr;
 	if (argc == 1){
+		//save current mask so it can be printed
 		mode_t current_mask = umask(0);
 		umask(current_mask);
 		printf("%04o\n", current_mask);
 	}else if (argc == 2){
 		if (strlen(argv[1]) > 4 || argv[1][0] != '0'){
+			//if the argument does not match 0XXX abort
 			fprintf(stderr, "Error: umask: invalid argument:%s\n", argv[1]);
 			return;
 		}
 		mode_t new_mask = (mode_t) strtoul(argv[1], &endptr, 8);
+		//abort if the argument was not converted into mode_t correctly
 		if (endptr == argv[1]){
 			fprintf(stderr, "Error: umask: invalid argument:%s\n", argv[1]);
 			return;
@@ -67,6 +73,7 @@ void umask_ms(int argc, char **argv){
 			fprintf(stderr, "Error: umask: invalid argument: %s\n", argv[1]);
 			return;
 		}
+		//set new mask
 		umask(new_mask);
 	}else {
 		fprintf(stderr, "Error: umask: too many arguments");
@@ -114,6 +121,7 @@ void bg(char **argv){
     int job_index = -1;
 
     if (argv[1] == NULL) {
+		//if there is no argument look for the latest stopped job
         for(i = last_job - 1; i >= 0; i--){
 			if(job_list[i]->running == 0){
 				job_index = i;
@@ -125,6 +133,7 @@ void bg(char **argv){
 			return;
 		}
     } else {
+		//if the job is specified look for that job
         job_id = atoi(argv[1]); 
         for (i = 0; i < last_job; i++) {
             if (job_list[i]->id == job_id) {
@@ -142,6 +151,7 @@ void bg(char **argv){
         return;
     }
 	for(i = 0; i < job_list[job_index]->ncommands; i++){
+		//resume all job processes execution with SIGCONT
 		if (kill(job_list[job_index]->pids[i], SIGCONT) < 0) {
 			fprintf(stderr, "Error: bg: could not continue command [%d] execution\n", job_list[job_index]->id);
 			return;
@@ -163,6 +173,7 @@ void execute_internal(int argc, char **argv){
     } else if (strcmp(name, "bg") == 0) {
         bg(argv);
     } else if (strcmp(name, "exit") == 0) {
+		//free all jobs and their related memory reservation & terminate execution
 		for(i = 0; i < last_job; i++){
 			free(job_list[i]->pids);
 			free(job_list[i]);
@@ -247,6 +258,7 @@ int main(void) {
 	/*********************SIGNAL CONFIG CODE*********************/
 	signal(SIGINT, shell_sigint_handler);
 	signal(SIGTSTP, SIG_IGN);
+	/************************************************************/
 
 	printf("msh> ");	
 
@@ -370,6 +382,7 @@ int main(void) {
 		if (line->background == 1){
 			printf("[%d] %d\n", last_job, processes[line->ncommands - 1]);
 			//add processes to jobs
+			//copy the pids of the processes so that it is not lost after parent frees memory
 			copy = malloc(sizeof(pid_t) * line->ncommands);
 			if (copy == NULL){
 				fprintf(stderr, "Error on memory reservation\n");
@@ -390,6 +403,7 @@ int main(void) {
                 }
 
 				if (WIFSTOPPED(status)){
+				//copy the pids of the processes left for execution so that it is not lost after parent frees memory & add job to bg
 					copy = malloc(sizeof(pid_t) * line->ncommands);
 					if (copy == NULL){
 						fprintf(stderr, "Error on memory reservation\n");
@@ -404,7 +418,7 @@ int main(void) {
 			//reset handler
 			signal(SIGINT, shell_sigint_handler);
 		}
-
+		//free pids array
 		free(processes);
 
 		printf("msh> ");	
